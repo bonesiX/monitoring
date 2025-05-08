@@ -11,17 +11,17 @@ services:
     networks:
       - monitor
 
-  nginx:
-    image: nginx:alpine
-    container_name: nginx
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: always
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
     ports:
       - "64443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
-      - ./htpasswd:/etc/nginx/.htpasswd
-      - ./certs:/etc/nginx/certs
-    depends_on:
-      - prometheus
+      - "./traefik/traefik.yml:/etc/traefik/traefik.yml"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
       - monitor
 
@@ -37,6 +37,8 @@ services:
       - grafana-storage:/var/lib/grafana
     networks:
       - monitor
+    labels:
+      - "traefik.enable=true"
 
   node_exporter:
     image: prom/node-exporter:latest
