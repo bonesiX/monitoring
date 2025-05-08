@@ -11,17 +11,17 @@ services:
     networks:
       - monitor
 
-  traefik:
-    image: traefik:v2.10
-    container_name: traefik
-    restart: always
-    command:
-      - "--configFile=/etc/traefik/traefik.yml"
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
     ports:
       - "64443:443"
     volumes:
-      - "./traefik/traefik.yml:/etc/traefik/traefik.yml"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./htpasswd:/etc/nginx/.htpasswd
+      - ./certs:/etc/nginx/certs
+    depends_on:
+      - prometheus
     networks:
       - monitor
 
