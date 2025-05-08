@@ -1,9 +1,10 @@
 entryPoints:
-  grafana:
-    address: ":3000"
+  https:
+    address: ":443"
 
 providers:
   docker:
+    endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
 
 api:
