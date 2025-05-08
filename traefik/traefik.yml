@@ -1,0 +1,11 @@
+entryPoints:
+  grafana:
+    address: ":3000"
+
+providers:
+  docker:
+    exposedByDefault: false
+
+api:
+  dashboard: false
+  insecure: false
