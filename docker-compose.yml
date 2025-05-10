@@ -12,34 +12,55 @@ services:
       - monitor
 
   traefik:
-    image: traefik:v2.10
+    image: traefik:v3.4.0
     container_name: traefik
-    restart: always
+    restart: unless-stopped
     command:
-      - "--configFile=/etc/traefik/traefik.yml"
+      - "--configFile=/traefik.yml"
     ports:
+      - "80:80"
       - "64443:443"
     volumes:
-      - "./traefik/traefik.yml:/etc/traefik/traefik.yml"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - /etc/localtime:/etc/localtime:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json
+      - ./traefik/hosts/:/hosts/:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - monitor
+    # Uncomment this for dashboard use
+    # Specify htpasswd
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.traefik.entrypoints=https"
+    #   - "traefik.http.routers.traefik.rule=Host(`${VPS_DOMAIN}`)"
+    #   - "traefik.http.routers.traefik.tls=true"
+    #   - "traefik.http.routers.traefik.tls.certresolver=letsEncrypt"
+    #   - "traefik.http.routers.traefik.service=api@internal"
+    #   - "traefik.http.services.traefik-traefik.loadbalancer.server.port=8899"
+    #   - "traefik.http.middlewares.traefik-auth.basicauth.users=<htpasswd>"
+    #   - "traefik.http.routers.traefik.middlewares=traefik-auth"
 
   grafana:
-    image: grafana/grafana-oss:latest
+    image: grafana/grafana-oss:12.0.0
     container_name: grafana
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
-      - GF_SERVER_ROOT_URL=https://${VPS_DOMAIN}:64443/
     volumes:
       - grafana-storage:/var/lib/grafana
     networks:
       - monitor
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.entrypoints=https"
+      - "traefik.http.routers.traefik.rule=Host(`${VPS_DOMAIN}`)"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=letsEncrypt"
 
   node_exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.9.1
     container_name: node_exporter
     pid: "host"
     restart: unless-stopped
