@@ -1,72 +1,141 @@
-version: '3.8'
-
 services:
-  prometheus:
-    image: prom/prometheus
-    container_name: prometheus
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-    networks:
-      - monitor
-
   traefik:
-    image: traefik:v3.4.0
+    image: ${TRAEFIK_IMAGE_TAG}
     container_name: traefik
     restart: unless-stopped
     command:
-      - "--configFile=/traefik.yml"
+      # Disable insecure API entrypoint
+      # - "--api.insecure=false"
+      # Define the secure (HTTPS) entry point on port 443
+      - "--entrypoints.websecure.address=:443"
+      # HTTP -> HTTPS redirect at entrypoint level
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      # Disable the built-in API and web-based dashboard
+      - "--api.dashboard=false"
+      # Enable the /ping endpoint so we can health-check Traefik
+      - "--ping=true"
+       # Enable the Docker provider to detect containers and their labels
+      - "--providers.docker=true"
+      # Prevent automatic exposure of all containers; only expose containers
+      # with "traefik.enable=true"
+      - "--providers.docker.exposedbydefault=false"
+      # Use ACME (Let's Encrypt) to generate/renew certificates via TLS challenge
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      # The email address used by Let's Encrypt for renewal notices
+      - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL}"
+      # The file where ACME certificates are stored inside the container
+      - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json"
+      # - "--certificatesresolvers.letsencrypt.acme.caServerName=https://acme-staging-v02.api.letsencrypt.org/directory"
+      # Check for newer Traefik versions and optionally log that info
+      - "--global.checknewversion=true"
+      # Disable sending anonymous usage data to the Traefik maintainers
+      - "--global.sendanonymoususage=false"
     ports:
       - "80:80"
       - "64443:443"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "100M"
+        reservations:
+          cpus: "0.05"
+          memory: "40M"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./traefik/traefik.yml:/traefik.yml:ro
-      - ./traefik/acme.json:/acme.json
-      - ./traefik/hosts/:/hosts/:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certificates:/etc/traefik/acme
     networks:
       - monitor
-    # Uncomment this for dashboard use
-    # Specify htpasswd
-    # labels:
-    #   - "traefik.enable=true"
-    #   - "traefik.http.routers.traefik.entrypoints=https"
-    #   - "traefik.http.routers.traefik.rule=Host(`${VPS_DOMAIN}`)"
-    #   - "traefik.http.routers.traefik.tls=true"
-    #   - "traefik.http.routers.traefik.tls.certresolver=letsEncrypt"
-    #   - "traefik.http.routers.traefik.service=api@internal"
-    #   - "traefik.http.services.traefik-traefik.loadbalancer.server.port=8899"
-    #   - "traefik.http.middlewares.traefik-auth.basicauth.users=<htpasswd>"
-    #   - "traefik.http.routers.traefik.middlewares=traefik-auth"
 
   grafana:
-    image: grafana/grafana-oss:12.0.0
+    image: ${GF_IMAGE_TAG}
     container_name: grafana
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "1G"
+        reservations:
+          cpus: "0.3"
+          memory: "150M"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     environment:
-      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
-      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      GF_SERVER_DOMAIN: ${GF_SERVER_DOMAIN}
     volumes:
       - grafana-storage:/var/lib/grafana
     networks:
       - monitor
     labels:
+      # Enable Traefik for this container
       - "traefik.enable=true"
-      - "traefik.http.routers.traefik.entrypoints=https"
-      - "traefik.http.routers.traefik.rule=Host(`${VPS_DOMAIN}`)"
-      - "traefik.http.routers.traefik.tls=true"
-      - "traefik.http.routers.traefik.tls.certresolver=letsEncrypt"
+      # Match incoming requests on a specific hostname
+      - "traefik.http.routers.grafana.rule=Host(`${GF_SERVER_DOMAIN}`)"
+      # Assign the router to a named Traefik service
+      - "traefik.http.routers.grafana.service=grafana"
+      # Use the 'websecure' (HTTPS) entry point
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      # Define the internal container port for routing
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      # Enable TLS on this router
+      - "traefik.http.routers.grafana.tls=true"
+      # Use Let's Encrypt for certificate management
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      # Pass the original Host header to the container
+      - "traefik.http.services.grafana.loadbalancer.passhostheader=true"
+      # Apply a compression middleware
+      - "traefik.http.routers.grafana.middlewares=compresstraefik"
+      # Define settings for the compression middleware
+      - "traefik.http.middlewares.compresstraefik.compress=true"
+    depends_on:
+      traefik:
+        condition: service_healthy
+
+  prometheus:
+    image: ${PROM_IMAGE_TAG}
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    healthcheck:
+      test: ["CMD", "wget", "http://localhost:9090"]
+      interval: 10s
+      timeout: 15s
+      retries: 10
+      start_period: 40s 
+    networks:
+      - monitor
 
   node_exporter:
-    image: prom/node-exporter:v1.9.1
+    image: ${NODE_IMAGE_TAG}
     container_name: node_exporter
     pid: "host"
     restart: unless-stopped
     command:
       - '--path.rootfs=/host'
       - '--web.listen-address=0.0.0.0:9100'
+    healthcheck:
+      test: ["CMD", "wget", "http://localhost:9100"]
+      interval: 10s
+      timeout: 15s
+      retries: 10
+      start_period: 40s 
     volumes:
       - /:/host:ro,rslave
     networks:
@@ -74,5 +143,6 @@ services:
 
 volumes:
   grafana-storage:
+  traefik-certificates:
 networks:
   monitor:
