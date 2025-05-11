@@ -6,6 +6,10 @@ services:
     command:
       # Disable insecure API entrypoint
       # - "--api.insecure=false"
+      # Set the log level (DEBUG, INFO, WARN, ERROR)
+      - "--log.level=${TRAEFIK_LOG_LEVEL}"
+      # Define the insecure (HTTP) entry point on port 80 
+      - "--entryPoints.web.address=:80"
       # Define the secure (HTTPS) entry point on port 443
       - "--entrypoints.websecure.address=:443"
       # HTTP -> HTTPS redirect at entrypoint level
@@ -20,13 +24,13 @@ services:
       # Prevent automatic exposure of all containers; only expose containers
       # with "traefik.enable=true"
       - "--providers.docker.exposedbydefault=false"
-      # Use ACME (Let's Encrypt) to generate/renew certificates via TLS challenge
-      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      # Use ACME (Let's Encrypt) to generate/renew certificates via HTTP challenge
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
       # The email address used by Let's Encrypt for renewal notices
       - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL}"
       # The file where ACME certificates are stored inside the container
       - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json"
-      # - "--certificatesresolvers.letsencrypt.acme.caServerName=https://acme-staging-v02.api.letsencrypt.org/directory"
+        #- "--certificatesresolvers.letsencrypt.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory"
       # Check for newer Traefik versions and optionally log that info
       - "--global.checknewversion=true"
       # Disable sending anonymous usage data to the Traefik maintainers
