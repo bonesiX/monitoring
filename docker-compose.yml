@@ -125,8 +125,6 @@ services:
       start_period: 40s 
     networks:
       - monitor
-    labels:
-      - "traefik.enable=true"
 
   node_exporter:
     image: ${NODE_IMAGE_TAG}
