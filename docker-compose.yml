@@ -125,12 +125,15 @@ services:
       start_period: 40s 
     networks:
       - monitor
+    extra_hosts:
+      - "host.docker.internal: 172.23.5.254"
     labels:
       - "traefik.enable=true"
 
   node_exporter:
     image: ${NODE_IMAGE_TAG}
     container_name: node_exporter
+    network_mode: "host"
     pid: "host"
     restart: unless-stopped
     command:
@@ -144,11 +147,16 @@ services:
       start_period: 40s 
     volumes:
       - /:/host:ro,rslave
-    networks:
-      - monitor
 
 volumes:
   grafana-storage:
   traefik-certificates:
 networks:
   monitor:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.23.0.0/16
+          ip_range: 172.23.5.0/24
+          gateway: 172.23.5.254
