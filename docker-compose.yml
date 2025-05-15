@@ -125,8 +125,6 @@ services:
       start_period: 40s 
     networks:
       - monitor
-    extra_hosts:
-      - "host.docker.internal:172.23.5.254"
     labels:
       - "traefik.enable=true"
 
@@ -138,7 +136,7 @@ services:
     restart: unless-stopped
     command:
       - '--path.rootfs=/host'
-      - '--web.listen-address=172.23.5.254:9100'
+      - '--web.listen-address=172.17.0.1:9100'
     healthcheck:
       test: ["CMD", "wget", "http://localhost:9100"]
       interval: 10s
@@ -153,10 +151,3 @@ volumes:
   traefik-certificates:
 networks:
   monitor:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.23.0.0/16
-          ip_range: 172.23.5.0/24
-          gateway: 172.23.5.254
